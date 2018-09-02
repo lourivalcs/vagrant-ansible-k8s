@@ -1,0 +1,54 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+Vagrant.configure("2") do |config|
+  id_rsa_pub = File.read("keys/id_rsa.pub")
+
+  config.vm.define "VM-Ansible" do |ansible|
+    ansible.vm.box = "centos/7"
+	
+	ansible.vm.provision "file", source: "keys/id_rsa", destination: "/home/vagrant/.ssh/id_rsa"
+	ansible.vm.provision "file", source: "hosts", destination: "/tmp/hosts"
+	ansible.vm.provision :shell, inline: "chmod 400 /home/vagrant/.ssh/id_rsa"	
+	ansible.vm.provision :shell, path: "ansible.sh"
+	
+	ansible.vm.network "private_network", ip: "10.0.0.1"
+	ansible.vm.hostname = 'VM-Ansible'
+	ansible.vm.provider "virtualbox" do |vb|
+	  vb.name = "VM-Ansible"
+      vb.memory = "512"
+    end
+  end
+  
+  config.vm.define "VM-K8s-M" do |kubernetes_master|
+    kubernetes_master.vm.box = "centos/7"
+	
+	kubernetes_master.vm.provision :shell, inline: "echo \"#{id_rsa_pub}\" >> /home/vagrant/.ssh/authorized_keys"
+	kubernetes_master.vm.provision :shell, inline: "chmod -R 600 /home/vagrant/.ssh/authorized_keys"
+	
+	kubernetes_master.vm.network "private_network", ip: "10.0.0.100"
+	kubernetes_master.vm.hostname = 'VM-Kubernetes-Master'
+	kubernetes_master.vm.provider "virtualbox" do |vb|
+	  vb.name = "VM-Kubernetes-Master"
+	  vb.customize ["modifyvm", :id, "--groups", "/Kubernetes"]
+      vb.memory = "512"
+    end
+  end
+  
+  (1..3).each do |i|
+    config.vm.define "VM-K8s-W-#{i}" do |kubernetes_worker|
+      kubernetes_worker.vm.box = "centos/7"
+	  
+	  kubernetes_worker.vm.provision :shell, inline: "echo \"#{id_rsa_pub}\" >> /home/vagrant/.ssh/authorized_keys"
+	  kubernetes_worker.vm.provision :shell, inline: "chmod -R 600 /home/vagrant/.ssh/authorized_keys"
+	  
+	  kubernetes_worker.vm.network "private_network", ip: "10.0.0.10#{i}"
+	  kubernetes_worker.vm.hostname = "VM-Kubernetes-Worker-#{i}"
+	  kubernetes_worker.vm.provider "virtualbox" do |vb|
+	    vb.name = "VM-Kubernetes-Worker-#{i}"
+		vb.customize ["modifyvm", :id, "--groups", "/Kubernetes"]
+        vb.memory = "512"
+      end
+    end
+  end
+  
+end
